@@ -1,0 +1,125 @@
+(function () {
+  "use strict";
+
+  var CONFIG = {
+    profile: "https://x.com/SymaroTeam",
+    handle: "@SymaroTeam",
+    title: "Follow us on X",
+    text: "Get the latest updates, announcements, and behind-the-scenes posts straight to your feed. Tap follow and never miss a thing.",
+    button: "Follow on X",
+    badge: "Posting daily",
+    position: "bottom-right",
+    delay: 600,
+    dismissForDays: 7
+  };
+ 
+  var KEY = "xFollowAlertDismissedUntil";
+  try {
+    var until = parseInt(localStorage.getItem(KEY) || "0", 10);
+    if (CONFIG.dismissForDays && until && Date.now() < until) return;
+  } catch (e) {}
+
+  function start() {
+    injectStyles();
+    var el = buildAlert();
+    document.body.appendChild(el);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { el.classList.add("xa-show"); });
+    });
+  }
+
+  function positionCSS() {
+    switch (CONFIG.position) {
+      case "bottom-left":  return "bottom:24px;left:24px;";
+      case "top-right":    return "top:24px;right:24px;";
+      case "top-left":     return "top:24px;left:24px;";
+      case "center":       return "top:50%;left:50%;transform:translate(-50%,-50%);";
+      default:             return "bottom:24px;right:24px;";
+    }
+  }
+
+  function injectStyles() {
+    if (document.getElementById("xa-styles")) return;
+    var pos = positionCSS();
+    var centered = CONFIG.position === "center";
+    var css = ''
+      + '#xa-alert{position:fixed;' + pos + 'z-index:2147483647;'
+      + 'width:360px;max-width:calc(100vw - 32px);'
+      + 'background:#000000;border-radius:16px;padding:24px;'
+      + 'box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px #2f3336;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;'
+      + 'opacity:0;' + (centered ? 'transform:translate(-50%,-50%) scale(.95);' : 'transform:translateY(20px) scale(.97);')
+      + 'transition:opacity .35s ease,transform .35s cubic-bezier(.2,.9,.3,1.2);'
+      + 'overflow:hidden;box-sizing:border-box;}'
+      + '#xa-alert.xa-show{opacity:1;' + (centered ? 'transform:translate(-50%,-50%) scale(1);' : 'transform:translateY(0) scale(1);') + '}'
+      + '#xa-alert *{box-sizing:border-box;}'
+      + '#xa-alert::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;'
+      + 'background:linear-gradient(90deg,#1d9bf0,#6fc4ff,#1d9bf0);background-size:200% 100%;animation:xa-slide 4s linear infinite;}'
+      + '.xa-close{position:absolute;top:14px;right:14px;width:26px;height:26px;border:none;'
+      + 'background:transparent;color:#71767b;font-size:20px;line-height:1;cursor:pointer;border-radius:6px;'
+      + 'display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;}'
+      + '.xa-close:hover{background:rgba(239,243,244,.1);color:#e7e9ea;}'
+      + '.xa-badge{display:inline-flex;align-items:center;gap:7px;background:rgba(29,155,240,.1);'
+      + 'color:#1d9bf0;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;margin-bottom:16px;}'
+      + '.xa-dot{width:8px;height:8px;border-radius:50%;background:#1d9bf0;animation:xa-pulse 2s infinite;}'
+      + '.xa-icon{width:56px;height:56px;border-radius:16px;background:#16181c;border:1px solid #2f3336;'
+      + 'display:flex;align-items:center;justify-content:center;margin-bottom:16px;}'
+      + '.xa-icon svg{width:26px;height:26px;fill:#e7e9ea;}'
+      + '#xa-alert h2{color:#e7e9ea;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-.4px;}'
+      + '#xa-alert .xa-handle{color:#71767b;font-size:14px;font-weight:500;margin:0 0 12px;}'
+      + '#xa-alert p{color:#71767b;font-size:14px;line-height:1.5;margin:0 0 20px;}'
+      + '.xa-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;'
+      + 'background:#ffffff;color:#0f1419;text-decoration:none;font-size:15px;font-weight:700;'
+      + 'padding:13px;border-radius:999px;transition:background .15s,transform .1s;}'
+      + '.xa-btn:hover{background:#d7dbdc;}.xa-btn:active{transform:translateY(1px);}'
+      + '.xa-btn svg{width:18px;height:18px;fill:#0f1419;}'
+      + '@keyframes xa-pulse{0%{box-shadow:0 0 0 0 rgba(29,155,240,.6);}70%{box-shadow:0 0 0 7px rgba(29,155,240,0);}100%{box-shadow:0 0 0 0 rgba(29,155,240,0);}}'
+      + '@keyframes xa-slide{0%{background-position:0 0;}100%{background-position:200% 0;}}';
+    var style = document.createElement("style");
+    style.id = "xa-styles";
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  var LOGO = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+    + '<path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
+
+  function buildAlert() {
+    var box = document.createElement("div");
+    box.id = "xa-alert";
+    box.setAttribute("role", "alert");
+    box.innerHTML =
+        '<button class="xa-close" aria-label="Close">&times;</button>'
+      + '<span class="xa-badge"><span class="xa-dot"></span>' + esc(CONFIG.badge) + '</span>'
+      + '<div class="xa-icon">' + LOGO + '</div>'
+      + '<h2>' + esc(CONFIG.title) + '</h2>'
+      + (CONFIG.handle ? '<div class="xa-handle">' + esc(CONFIG.handle) + '</div>' : '')
+      + '<p>' + esc(CONFIG.text) + '</p>'
+      + '<a class="xa-btn" href="' + esc(CONFIG.profile) + '" target="_blank" rel="noopener noreferrer">'
+      + LOGO + esc(CONFIG.button) + '</a>';
+
+    box.querySelector(".xa-close").addEventListener("click", function () {
+      box.classList.remove("xa-show");
+      setTimeout(function () { box.remove(); }, 350);
+      if (CONFIG.dismissForDays) {
+        try {
+          localStorage.setItem(KEY, String(Date.now() + CONFIG.dismissForDays * 864e5));
+        } catch (e) {}
+      }
+    });
+    return box;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function init() { setTimeout(start, CONFIG.delay); }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

@@ -1,0 +1,240 @@
+/*
+ * @SymaroTeam public-post embed. No X API key or account is required.
+ * latest-tweet.php reads X's public embedded-profile HTML on this site's server.
+ * The browser needs that same-origin relay because X does not grant CORS access
+ * to its profile HTML. X may cache or limit the public timeline it returns.
+ */
+(function () {
+  'use strict';
+
+  const PROFILE = 'SymaroTeam';
+  const ownScript = document.currentScript;
+  const ENDPOINT = new URL(
+    'latest-tweet.php',
+    ownScript ? ownScript.src : document.baseURI
+  ).href;
+
+  let widgetsPromise;
+
+  // IDs must stay strings: X IDs exceed JavaScript's safe integer range.
+  function validTweetId(value) {
+    return typeof value === 'string' && /^[1-9][0-9]{5,24}$/.test(value);
+  }
+
+  async function getLatestTweet(signal) {
+    const response = await fetch(ENDPOINT, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json'
+      },
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: signal
+    });
+
+    const post = await response.json();
+
+    if (!response.ok || post.ok !== true || !validTweetId(post.id)) {
+      const code = post.error && post.error.code
+        ? post.error.code
+        : 'lookup_failed';
+
+      throw new Error('Latest post lookup failed: ' + code);
+    }
+
+    return post;
+  }
+
+  function loadWidgets() {
+    if (
+      window.twttr &&
+      window.twttr.widgets &&
+      typeof window.twttr.widgets.createTweet === 'function'
+    ) {
+      return Promise.resolve(window.twttr);
+    }
+
+    if (widgetsPromise) {
+      return widgetsPromise;
+    }
+
+    widgetsPromise = new Promise(function (resolve, reject) {
+      let settled = false;
+
+      const timer = window.setTimeout(function () {
+        finish(new Error('X embed script timed out.'));
+      }, 15000);
+
+      function finish(error, twitter) {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        window.clearTimeout(timer);
+
+        if (error) {
+          reject(error);
+        } else {
+          resolve(twitter);
+        }
+      }
+
+      const twitter = window.twttr = window.twttr || {};
+
+      twitter._e = twitter._e || [];
+
+      twitter.ready = twitter.ready || function (callback) {
+        twitter._e.push(callback);
+      };
+
+      twitter.ready(function (api) {
+        if (
+          api &&
+          api.widgets &&
+          typeof api.widgets.createTweet === 'function'
+        ) {
+          finish(null, api);
+        } else {
+          finish(new Error('X embed library is unavailable.'));
+        }
+      });
+
+      let script =
+        document.getElementById('twitter-wjs') ||
+        document.querySelector(
+          'script[src*="platform.twitter.com/widgets.js"]'
+        );
+
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'twitter-wjs';
+        script.src = 'https://platform.twitter.com/widgets.js';
+        script.async = true;
+        script.charset = 'utf-8';
+
+        script.addEventListener('error', function () {
+          finish(new Error('X embed script could not load.'));
+        }, { once: true });
+
+        document.head.appendChild(script);
+      } else {
+        script.addEventListener('error', function () {
+          finish(new Error('X embed script could not load.'));
+        }, { once: true });
+      }
+    });
+
+    return widgetsPromise;
+  }
+
+  async function displayLatestTweet() {
+    const host = document.getElementById('symaro-tweet');
+    const status = document.getElementById('symaro-tweet-status');
+    const source = document.getElementById('symaro-tweet-source');
+    const heading = document.getElementById('symaro-tweet-heading');
+
+    if (
+      !host ||
+      !status ||
+      !source ||
+      host.dataset.initialized === 'true'
+    ) {
+      return;
+    }
+
+    host.dataset.initialized = 'true';
+
+    status.textContent = 'Loading the latest post...';
+    status.hidden = false;
+
+    const controller = new AbortController();
+    let rendered = false;
+
+    const timeout = window.setTimeout(function () {
+      controller.abort();
+
+      if (!rendered) {
+        showFallback();
+      }
+    }, 30000);
+
+    function showFallback() {
+      status.textContent =
+        'The post could not load. You can view it on X below.';
+      status.hidden = false;
+    }
+
+    try {
+      const results = await Promise.all([
+        getLatestTweet(controller.signal).then(function (post) {
+          source.href = post.stale
+            ? 'https://x.com/' + PROFILE
+            : 'https://x.com/' + PROFILE + '/status/' + post.id;
+
+          source.textContent = post.stale
+            ? 'View latest updates on X'
+            : 'View this post on X';
+
+          if (heading) {
+            heading.textContent = post.stale
+              ? 'From @' + PROFILE
+              : 'Latest from @' + PROFILE;
+          }
+
+          host.dataset.tweetId = post.id;
+
+          return post;
+        }),
+        loadWidgets()
+      ]);
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      const post = results[0];
+      const twitter = results[1];
+
+      const element = await twitter.widgets.createTweet(
+        post.id,
+        host,
+        {
+          align: 'center',
+          theme: 'light',
+          conversation: 'none',
+          dnt: true
+        }
+      );
+
+      if (!element) {
+        throw new Error('X did not render the post.');
+      }
+
+      rendered = true;
+
+      status.textContent = post.stale
+        ? 'Showing a saved post. View the latest updates on X.'
+        : '';
+
+      status.hidden = !post.stale;
+    } catch (error) {
+      controller.abort();
+      showFallback();
+
+      console.warn('[Symaro post embed]', error.message);
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      displayLatestTweet,
+      { once: true }
+    );
+  } else {
+    displayLatestTweet();
+  }
+})();
